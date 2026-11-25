@@ -6,7 +6,8 @@
 
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
 ARG TARGETARCH=amd64
-ENV CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH
+# -mod=mod while go.sum is not yet committed; pin once go.sum lands.
+ENV CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH GOFLAGS=-mod=mod
 WORKDIR /src
 COPY . .
 RUN go mod download && \
