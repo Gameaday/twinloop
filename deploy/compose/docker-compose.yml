@@ -1,0 +1,89 @@
+# Twin Loop stacks. A node needs only Docker, this file, and a filled
+# .env: state hydrates on boot from the snapshot endpoint (design
+# invariant 2). Images are FROM scratch, so health probes must be HTTP;
+# compose healthcheck commands are unavailable by design.
+#
+# Traefik labels assume this host is a Traefik docker provider. If a
+# service is routed from another node instead, swap the labels for your
+# file/consul provider config and keep `expose` for local testing.
+
+services:
+  mortard:
+    image: ghcr.io/gameaday/twinloop-mortar:${TAG:-latest}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - mortar-data:/data
+    environment:
+      ADDR: ":8091"
+      DATA_DIR: /data
+      MIGRATIONS_DIR: /migrations
+      STATE_ENDPOINT: ${STATE_ENDPOINT:-}
+      STATE_PREFIX: twinloop/mortard
+      STATE_TOKEN: ${STATE_TOKEN:-}
+      BACKUP_INTERVAL_SEC: ${BACKUP_INTERVAL_SEC:-3600}
+      # World cadence: 86400 = one tick per day (v1); lower later.
+      TICK_INTERVAL_SEC: ${TICK_INTERVAL_SEC:-86400}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    expose:
+      - "8091"
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.mortar.rule: Host(`${MORTAR_HOST:-mortar.twinloopgames.com}`)
+      traefik.http.routers.mortar.entrypoints: websecure
+      traefik.http.routers.mortar.tls.certresolver: myresolver
+      traefik.http.services.mortar.loadbalancer.server.port: "8091"
+
+  sunderd:
+    image: ghcr.io/gameaday/twinloop-sunder:${TAG:-latest}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - sunder-data:/data
+    environment:
+      ADDR: ":8092"
+      DATA_DIR: /data
+      MIGRATIONS_DIR: /migrations
+      STATE_ENDPOINT: ${STATE_ENDPOINT:-}
+      STATE_PREFIX: twinloop/sunderd
+      STATE_TOKEN: ${STATE_TOKEN:-}
+      BACKUP_INTERVAL_SEC: ${BACKUP_INTERVAL_SEC:-3600}
+      DAILY_SEED_SECRET: ${DAILY_SEED_SECRET:?set DAILY_SEED_SECRET in .env}
+      DAILY_EPOCH: ${DAILY_EPOCH:-2026-11-02}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    expose:
+      - "8092"
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.sunder.rule: Host(`${SUNDER_HOST:-sunder.twinloopgames.com}`)
+      traefik.http.routers.sunder.entrypoints: websecure
+      traefik.http.routers.sunder.tls.certresolver: myresolver
+      traefik.http.services.sunder.loadbalancer.server.port: "8092"
+
+volumes:
+  mortar-data:
+  sunder-data:
