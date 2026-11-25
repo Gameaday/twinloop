@@ -1,0 +1,45 @@
+name: go-sum
+
+# Generates and commits go.mod/go.sum so no developer machine needs Go
+# installed. Bot commits do not trigger workflows, so the commit made
+# here is validated by the next real push; the ci.yml tidy gate turns
+# strict automatically once go.sum exists.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: go-sum
+  cancel-in-progress: false
+
+jobs:
+  tidy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Tidy
+        run: go mod tidy
+
+      - name: Commit sums if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet go.mod go.sum; then
+            echo "No module drift; nothing to commit"
+            exit 0
+          fi
+          git add go.mod go.sum
+          git commit -m "chore: update go module sums"
+          git push

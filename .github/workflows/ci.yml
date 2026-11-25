@@ -15,11 +15,6 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    env:
-      # go.sum is generated on the runner for now (-mod=mod lets the go
-      # command fill it in). Once a generated go.sum is committed, this
-      # env goes and the hard drift gate comes back.
-      GOFLAGS: -mod=mod
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -39,8 +34,21 @@ jobs:
             exit 1
           fi
 
-      - name: Tidy (module sums generated on runner until go.sum is committed)
-        run: go mod tidy
+      # Self-healing gate: strict drift check once go.sum is committed
+      # (the go-sum workflow maintains it), lenient before that. No
+      # developer machine needs Go installed.
+      - name: Tidy
+        run: |
+          go mod tidy
+          if git ls-files --error-unmatch go.sum >/dev/null 2>&1; then
+            if ! git diff --quiet go.mod go.sum; then
+              echo "::error::go.mod/go.sum drifted from the code; the go-sum workflow or a maintainer must commit the tidied files"
+              git diff go.mod go.sum
+              exit 1
+            fi
+          else
+            echo "::notice::go.sum not yet committed; module sums generated on the runner for this run only"
+          fi
 
       - name: Vet
         run: go vet ./...
